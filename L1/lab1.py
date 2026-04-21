@@ -14,42 +14,37 @@ def rozpoznaj_i_podlicz(sciezka_do_obrazu):
     img = cv2.resize(img, (docelowa_szerokosc, int(wysokosc * skala)))
     output = img.copy()
     
-    # Kopia obrazu w palecie HSV (idealna do sprawdzania kolorów)
-    hsv_img = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    
     # 2. PRZETWARZANIE
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    # Zmniejszyłem rozmycie (z 17 na 13), aby nie usuwało krawędzi brakujących monet
     blurred = cv2.medianBlur(gray, 13)
 
-    # 3. DETEKCJA OKRĘGÓW (bardziej czuła)
+    # 3. DETEKCJA OKRĘGÓW 
     circles = cv2.HoughCircles(
         blurred, 
         cv2.HOUGH_GRADIENT, 
         dp=1.2,            
         minDist=35,        
         param1=45,         
-        param2=30,         # Niższy próg by złapać wszystkie monety
+        param2=30,         
         minRadius=14,      
         maxRadius=55       
     )
 
     # 4. BAZA MONET Z KOLORAMI ŚRODKA
     monety_pl = [
-        {"val": 5.0,  "d": 24.0, "name": "5zl",  "srodek": "srebrny"}, # Bimetal: srebrny środek
+        {"val": 5.0,  "d": 24.0, "name": "5zl",  "srodek": "srebrny"}, 
         {"val": 1.0,  "d": 22.7, "name": "1zl",  "srodek": "srebrny"},
-        {"val": 2.0,  "d": 21.5, "name": "2zl",  "srodek": "zloty"},   # Bimetal: złoty środek
+        {"val": 2.0,  "d": 21.5, "name": "2zl",  "srodek": "zloty"},   
         {"val": 0.5,  "d": 20.5, "name": "50gr", "srodek": "srebrny"},
-        {"val": 0.05, "d": 19.5, "name": "5gr",  "srodek": "zloty"},
         {"val": 0.2,  "d": 18.5, "name": "20gr", "srodek": "srebrny"},
-        {"val": 0.02, "d": 17.5, "name": "2gr",  "srodek": "zloty"},
         {"val": 0.1,  "d": 16.5, "name": "10gr", "srodek": "srebrny"},
+        {"val": 0.05, "d": 19.5, "name": "5gr",  "srodek": "zloty"},
+        {"val": 0.02, "d": 17.5, "name": "2gr",  "srodek": "zloty"},
         {"val": 0.01, "d": 15.5, "name": "1gr",  "srodek": "zloty"}
     ]
 
     if circles is not None:
         circles = np.round(circles[0, :]).astype("int")
-        # Sortujemy od największej (dla kalibracji skali)
         circles = sorted(circles, key=lambda x: x[2], reverse=True)
 
         max_r_px = circles[0][2]
@@ -61,34 +56,39 @@ def rozpoznaj_i_podlicz(sciezka_do_obrazu):
             srednica_px = r * 2
             srednica_mm = srednica_px / skala_px_na_mm
             
-            # --- ROZPOZNAWANIE KOLORU ---
-            # Tworzymy maskę wycinającą sam środek monety (promień * 0.5)
+            # --- NOWE, ODPORNE ROZPOZNAWANIE KOLORU ---
             mask = np.zeros(img.shape[:2], dtype="uint8")
-            cv2.circle(mask, (x, y), int(r * 0.5), 255, -1)
+            # Wycinamy mniejszy fragment środka (0.4), by nie łapać pierścieni bimetalowych
+            cv2.circle(mask, (x, y), int(r * 0.4), 255, -1)
             
-            # Obliczamy średnią wartość kolorów wewnątrz środka
-            mean_hsv = cv2.mean(hsv_img, mask=mask)
-            saturacja = mean_hsv[1]
+            # Obliczamy średnie B, G, R wewnątrz monety
+            mean_bgr = cv2.mean(img, mask=mask)
+            b, g, red = mean_bgr[0], mean_bgr[1], mean_bgr[2]
             
-            # Jeśli saturacja jest niska, to szarość/srebro. Jeśli wysoka - złoto/miedź.
-            if saturacja > 40: 
+            # Matematyka: miedź i mosiądz odbijają o co najmniej 15% więcej czerwieni niż niebieskiego.
+            ratio_red_to_blue = red / (b + 1e-5) # 1e-5 zapobiega dzieleniu przez zero
+            
+            if ratio_red_to_blue > 1.15: 
                 wykryty_srodek = "zloty"
-                kolor_ramki = (0, 215, 255)  # Rysuje na żółto
+                kolor_ramki = (0, 215, 255)  
             else:
                 wykryty_srodek = "srebrny"
-                kolor_ramki = (192, 192, 192) # Rysuje na szaro/srebrno
+                kolor_ramki = (192, 192, 192) 
             
-            # Filtrujemy bazę: sprawdzamy wymiary TYLKO wśród monet o odpowiednim kolorze!
+            # Filtrujemy bazę i dobieramy
             kandydaci = [m for m in monety_pl if m["srodek"] == wykryty_srodek]
+            
+            if not kandydaci:
+                continue
+                
             match = min(kandydaci, key=lambda m: abs(m["d"] - srednica_mm))
             
-            # Odchylenie rzędu 3.5 mm dopuszczamy (perspektywa/odblaski)
-            if abs(match["d"] - srednica_mm) > 3.5:
+            # Margines tolerancji lekko zwiększony (do 4.0), żeby uodpornić kod na odkształcenia
+            if abs(match["d"] - srednica_mm) > 4.0:
                 continue
 
             suma_calkowita += match["val"]
             
-            # Rysowanie kółek w kolorze wykrytego materiału
             cv2.circle(output, (x, y), r, kolor_ramki, 2)
             cv2.rectangle(output, (x-25, y-15), (x+35, y+5), (0,0,0), -1)
             cv2.putText(output, match['name'], (x-20, y), 
@@ -100,7 +100,7 @@ def rozpoznaj_i_podlicz(sciezka_do_obrazu):
         cv2.putText(output, f"SUMA: {suma_calkowita:.2f} PLN", (20, 50), 
                     cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3)
 
-        cv2.imshow("Wynik Rozpoznawania z Kolorem", output)
+        cv2.imshow("Wynik Rozpoznawania (Nowy Kolor)", output)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
     else:
