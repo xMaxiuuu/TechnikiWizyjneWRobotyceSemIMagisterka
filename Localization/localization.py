@@ -76,7 +76,7 @@ class CorridorLocator:
             
             label = f"R: {query_name} -> {self.ref_names[best_idx]} ({final_confidence:.1f}%)"
             cv2.putText(side_by_side, label, (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-            cv2.imwrite(f"DOPASOWANIE_{query_name}", side_by_side)
+            cv2.imwrite(f"Comp_{query_name}", side_by_side)
             
             return {
                 "ref": self.ref_names[best_idx],
@@ -85,7 +85,7 @@ class CorridorLocator:
         return None
 
 # --- URUCHOMIENIE ---
-FOLDER = "Foty korytarza"
+FOLDER = "Base"
 TESTY = ["R1.jpeg", "R2.jpeg", "R3.jpeg", "R4.jpeg", "R5.jpeg"]
 
 locator = CorridorLocator(FOLDER)

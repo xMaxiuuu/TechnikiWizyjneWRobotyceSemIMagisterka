@@ -106,4 +106,4 @@ def rozpoznaj_i_podlicz(sciezka_do_obrazu):
     else:
         print("Nie wykryto monet.")
 
-rozpoznaj_i_podlicz('monety.jpg')
+rozpoznaj_i_podlicz('CashPhoto.jpg')
