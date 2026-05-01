@@ -91,7 +91,6 @@ TESTY = ["R1.jpeg", "R2.jpeg", "R3.jpeg", "R4.jpeg", "R5.jpeg"]
 locator = CorridorLocator(FOLDER)
 locator.load_database()
 
-# Terminal bez kolumny "PUNKTY"
 print(f"{'ZDJĘCIE':<10} | {'WYNIK':<10} | {'PEWNOŚĆ %'}")
 print("-" * 35)
 
